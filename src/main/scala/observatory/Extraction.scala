@@ -1,6 +1,6 @@
 package observatory
 
-import java.io.File
+import scala.io.Source
 import java.time.LocalDate
 
 import org.apache.spark.sql.SparkSession
@@ -13,7 +13,7 @@ object Extraction {
 
   Logger.getRootLogger.setLevel(Level.ERROR)
 
-  val spark = SparkSession
+  val spark: SparkSession = SparkSession
     .builder
     .master("local[*]")
     .appName("Observatory")
@@ -27,20 +27,25 @@ object Extraction {
     */
   def locateTemperatures(year: Int, stationsFile: String, temperaturesFile: String): Iterable[(LocalDate, Location, Double)] = {
 
-    val stations = spark.sparkContext.textFile(getClass.getResource(stationsFile).toURI.toString)
+    val stationsFileStream = getClass.getResourceAsStream(stationsFile)
+    val stationsLines = Source.fromInputStream(stationsFileStream).getLines.toSeq
+
+    val stations = spark.sparkContext.parallelize(stationsLines)
       .map(_.split(","))
       .filter(_.length == 4)
       .map(i => Station(i(0), i(1), i(2).toDouble, i(3).toDouble))
-      .filter(i => i.lon != 0.0 || i.lat != 0.0)
-      .map(i => (i.stn, i))
+      .map(i => (i.id, i))
 
-    val records = spark.sparkContext.textFile(getClass.getResource(temperaturesFile).toURI.toString)
+    val recordsFileStream = getClass.getResourceAsStream(temperaturesFile)
+    val recordsLines = Source.fromInputStream(recordsFileStream).getLines.toSeq
+
+    val records = spark.sparkContext.parallelize(recordsLines)
       .map(_.split(","))
       .map(i => Record(i(0), i(1), year, i(2).toInt, i(3).toInt, (i(4).toDouble - 32) * 5 / 9))
-      .map(i => (i.stn, i))
+      .map(i => (i.id, i))
 
-    stations.join(records)
-      .map(i => (i._2._2.date, i._2._1.location, i._2._2.temperature))
+    records.join(stations)
+      .map(i => (i._2._1.date, i._2._2.location, i._2._1.temperature))
       .collect
   }
 

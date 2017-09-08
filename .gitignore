@@ -1,7 +1,5 @@
-target
-*.class
-*.iml
-*.ipr
-*.iws
-.idea
-out
+target/
+.gitignore
+.idea/
+project/project/
+spark-warehouse/
